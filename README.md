@@ -1,16 +1,31 @@
-# SAS Academy Typing Platform
+# SAS Academy Typing — Windows Desktop Application
 
-A full-stack typing practice and examination platform for competitive-exam preparation. SAS Academy provides server-authoritative scoring, automatic exam-mode selection, character-accurate result analysis, performance analytics, and a complete administration workspace.
+A professional Windows desktop application for competitive-exam typing practice and assessment. SAS Academy provides server-authoritative scoring, automatic exam-mode selection, character-accurate result analysis, performance analytics, and a complete administration workspace in a native desktop window.
 
-Built with React, Express, MongoDB, and Node.js.
+Built with Electron, React, Express, MongoDB, and Node.js.
 
-## Windows desktop edition
+The Electron edition reuses the established React interface and Express API without changing the application's business logic, exam workflows, scoring engine, or administration features.
 
-The repository also includes an Electron desktop edition that reuses the existing React interface and Express API without changing business logic. See [docs/DESKTOP.md](docs/DESKTOP.md) for development, packaging, artifact, and desktop-integration details.
+## Desktop Features
+
+- Native Windows application with a dedicated application icon
+- Automatic React and Express startup in desktop development mode
+- Native minimize, maximize, restore, close, resize, and fullscreen controls
+- Remembered window size, position, and maximized state
+- Standard desktop keyboard shortcuts for editing, zoom, reload, and fullscreen
+- Native file selection and download save dialogs
+- Single-instance behavior that restores and focuses the existing window
+- Secure renderer isolation with sandboxing and Node.js integration disabled
+- NSIS installer configuration and a standalone portable build
+- Local static assets, persistent sessions, themes, and typing preferences
+- Graceful offline and unreachable-service messages
+
+Desktop notifications and automatic application updates are not currently configured. They should not be advertised or relied upon until a notification workflow and signed update provider are added.
 
 ## Contents
 
 - [Highlights](#highlights)
+- [Desktop Features](#desktop-features)
 - [Exam modes](#exam-modes)
 - [Scoring](#scoring)
 - [Architecture](#architecture)
@@ -20,7 +35,8 @@ The repository also includes an Electron desktop edition that reuses the existin
 - [Administrator accounts](#administrator-accounts)
 - [Available scripts](#available-scripts)
 - [API overview](#api-overview)
-- [Deployment](#deployment)
+- [Windows installation](#windows-installation)
+- [Desktop distribution](#desktop-distribution)
 - [Testing](#testing)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
@@ -54,7 +70,7 @@ The repository also includes an Electron desktop edition that reuses the existin
 - Exam creation, editing, activation, and deletion
 - Searchable paragraph management with language validation
 - User search and access control
-- Dynamic website name, support email, announcement, and maintenance mode
+- Dynamic application name, support email, announcement, and maintenance mode
 - Uploaded or catalogue-based exam logos
 - History-safe deletion rules that protect saved learner results
 
@@ -125,7 +141,9 @@ Accuracy and Net WPM are clamped to valid ranges. The same classified alignment 
 
 ```mermaid
 flowchart LR
-    Browser[React client] -->|JWT + JSON API| API[Express API]
+    Main[Electron Main Process] -->|Creates and manages| Renderer[Electron Renderer<br/>React UI]
+    Main --> Native[Windows integration<br/>Window state, menus, dialogs]
+    Renderer -->|JWT + JSON API| API[Express Backend]
     API --> Auth[Authentication and validation]
     API --> Exams[Exam and paragraph services]
     API --> Scoring[Scoring and comparison engine]
@@ -134,11 +152,18 @@ flowchart LR
     Exams --> Mongo
     Scoring --> Mongo
     Analytics --> Mongo
-    Admin[Admin workspace] -->|Role-gated API| API
+    Renderer --> Admin[Student and Admin workspaces]
+    Admin -->|Role-gated API| API
 ```
+
+In development, `npm run dev:desktop` starts the Electron application, React development server, and Express backend together. Packaged builds contain the Electron main process and compiled React renderer; they connect to the API selected by `VITE_API_URL`. The current distributable does not embed MongoDB or launch a packaged Express process automatically.
 
 ```text
 .
+├── desktop/                 Electron desktop integration
+│   ├── assets/              Windows application icon
+│   ├── main.cjs             Main process, native window, menus, dialogs, and lifecycle
+│   └── preload.cjs          Minimal isolated renderer bridge
 ├── client/                  React + Vite frontend
 │   ├── public/              Logos and exam assets
 │   └── src/
@@ -156,7 +181,8 @@ flowchart LR
 │       ├── routes/          REST routes
 │       ├── utils/           Scoring, JWT, timing, modes, and startup helpers
 │       └── validators/      Zod request schemas
-├── render.yaml              Render backend blueprint
+├── docs/DESKTOP.md          Desktop development and packaging reference
+├── render.yaml              Optional hosted API blueprint
 └── package.json             Workspace scripts
 ```
 
@@ -164,6 +190,7 @@ flowchart LR
 
 | Layer | Technology |
 | --- | --- |
+| Desktop runtime | Electron 37 |
 | Frontend | React 19, React Router, Vite |
 | UI | CSS, Lucide React |
 | Charts | Recharts |
@@ -173,7 +200,8 @@ flowchart LR
 | Authentication | JWT, bcrypt |
 | Email | Nodemailer |
 | Security | Helmet, CORS, rate limiting |
-| Deployment | Vercel frontend, Render backend |
+| Packaging | electron-builder, NSIS, portable executable |
+| Optional API hosting | Render or another Node.js host |
 
 ## Local development
 
@@ -182,6 +210,7 @@ flowchart LR
 - Node.js `22.x`
 - npm
 - MongoDB running locally or a MongoDB Atlas connection string
+- Windows 10/11 for native Windows testing and installer generation
 
 ### Installation
 
@@ -199,19 +228,19 @@ cp server/.env.example server/.env
 cp client/.env.example client/.env
 ```
 
-Update at least `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in `server/.env`, then start both applications:
+Update at least `MONGODB_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` in `server/.env`, then start the Express API, Vite renderer, and Electron application together:
 
 ```bash
-npm run dev
+npm run dev:desktop
 ```
 
 | Service | Local URL |
 | --- | --- |
-| Frontend | `http://localhost:5173` |
+| Electron renderer development server | `http://localhost:5173` |
 | API | `http://localhost:5000` |
 | Health check | `http://localhost:5000/health` |
 
-The default catalogue is created idempotently during server startup. Existing admin-edited exams are not overwritten.
+Electron opens the renderer automatically; the development URL is listed only for diagnostics. The default catalogue is created idempotently during backend startup. Existing admin-edited exams are not overwritten.
 
 ## Environment variables
 
@@ -224,7 +253,7 @@ The default catalogue is created idempotently during server startup. Existing ad
 | `MONGODB_URI` | Yes | MongoDB connection string |
 | `JWT_SECRET` | Yes | Random secret of at least 32 characters |
 | `JWT_EXPIRES_IN` | No | Login-token lifetime; defaults to `7d` |
-| `CLIENT_URL` | Yes | Exact allowed frontend origin; comma-separated exact origins are supported |
+| `CLIENT_URL` | For hosted clients | Exact allowed client origin; comma-separated exact origins are supported |
 | `ADMIN_EMAIL` | Recommended | Startup-managed administrator email |
 | `ADMIN_PASSWORD` | Recommended | Startup-managed administrator password |
 | `SMTP_HOST` | For email reset | SMTP hostname |
@@ -234,21 +263,21 @@ The default catalogue is created idempotently during server startup. Existing ad
 | `SMTP_PASSWORD` | If required | SMTP password |
 | `MAIL_FROM` | No | Password-reset sender identity |
 
-Production `CLIENT_URL` values must use HTTPS and exact origins. Wildcards are intentionally rejected.
+Hosted production `CLIENT_URL` values must use HTTPS and exact origins. Electron requests loaded from the packaged local application do not require a public desktop origin.
 
 ### Client
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `VITE_API_URL` | Yes in deployment | API base URL, normally ending in `/api` |
+| `VITE_API_URL` | Yes for distribution | API base URL compiled into the desktop renderer, normally ending in `/api` |
 
 Example:
 
 ```env
-VITE_API_URL=https://your-api.onrender.com/api
+VITE_API_URL=https://api.example.com/api
 ```
 
-Never commit real credentials or production `.env` files.
+The desktop application stores no database or server secrets. Never commit real credentials or production `.env` files.
 
 ## Administrator accounts
 
@@ -279,9 +308,14 @@ Run these commands from the repository root unless noted otherwise.
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start client and server in development mode |
+| `npm run dev:desktop` | Start Electron, the React renderer, and Express API in development mode |
+| `npm run dev` | Start the React and Express services without Electron |
 | `npm run install:all` | Install client and server dependencies |
 | `npm run build` | Build the production frontend |
+| `npm run build:desktop` | Build the production Electron renderer |
+| `npm run dist:win` | Generate the Windows installer and portable executable |
+| `npm run dist:win:installer` | Generate the NSIS Windows installer |
+| `npm run dist:win:portable` | Generate the portable Windows executable |
 | `npm test` | Run the server test suite |
 | `npm run build --prefix server` | Validate the server entry point |
 | `npm run admin:upsert --prefix server` | Create or update an administrator |
