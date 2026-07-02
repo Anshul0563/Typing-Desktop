@@ -1,0 +1,353 @@
+import { useEffect, useState, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api.js';
+import { Loader } from '../components/Loader.jsx';
+import { Notice } from '../components/Toast.jsx';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { TrendingUp, Zap, Target, Calendar, Download, RefreshCw } from 'lucide-react';
+import './AnalyticsDashboard.css';
+
+const chartGrid = 'var(--chart-grid)';
+const chartAxis = 'var(--chart-axis)';
+const tooltipStyle = { backgroundColor: 'var(--chart-tooltip-bg)', border: '1px solid var(--chart-tooltip-border)', color: 'var(--chart-tooltip-text)', borderRadius: 8 };
+const chartColors = ['#2457d6', '#7352cf', '#06b6d4', '#13845f', '#f59e0b'];
+const formatDuration = (seconds) => {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
+};
+
+export default function AnalyticsDashboard() {
+  const { user } = useAuth();
+  const [summary, setSummary] = useState(null);
+  const [trend, setTrend] = useState([]);
+  const [examStats, setExamStats] = useState([]);
+  const [modeComparison, setModeComparison] = useState([]);
+  const [weeklyPattern, setWeeklyPattern] = useState([]);
+  const [hourlyPattern, setHourlyPattern] = useState([]);
+  const [progressReport, setProgressReport] = useState(null);
+  const [detailedReport, setDetailedReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [timeRange, setTimeRange] = useState('all');
+  const [trendDays, setTrendDays] = useState(30);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [user, timeRange, trendDays]);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const responses = await Promise.allSettled([
+        api(`/analytics/summary/${user._id}?timeRange=${timeRange}`),
+        api(`/analytics/trend/${user._id}?days=${trendDays}`),
+        api(`/analytics/exam-stats/${user._id}`),
+        api(`/analytics/mode-comparison/${user._id}`),
+        api(`/analytics/weekly-pattern/${user._id}`),
+        api(`/analytics/hourly-pattern/${user._id}`),
+        api(`/analytics/progress/${user._id}?days=${trendDays}`),
+        api(`/analytics/detailed/${user._id}?timeRange=${timeRange}`)
+      ]);
+      const setters = [setSummary, setTrend, setExamStats, setModeComparison, setWeeklyPattern, setHourlyPattern, setProgressReport, setDetailedReport];
+      responses.forEach((response, index) => {
+        if (response.status === 'fulfilled') setters[index](response.value.data);
+      });
+      const failures = responses.filter((response) => response.status === 'rejected');
+      if (failures.length === responses.length) throw failures[0].reason;
+      if (failures.length) setError(`${failures.length} analytics section${failures.length === 1 ? '' : 's'} could not be loaded. Available graphs are shown below.`);
+    } catch (err) {
+      setError(err.message || 'Failed to load analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportAsJSON = () => {
+    const data = {
+      summary,
+      trend,
+      examStats,
+      modeComparison,
+      weeklyPattern,
+      hourlyPattern,
+      progressReport,
+      exportedAt: new Date().toISOString()
+    };
+    const element = document.createElement('a');
+    element.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2));
+    element.download = `analytics-${new Date().toISOString().split('T')[0]}.json`;
+    element.click();
+  };
+
+  // Optimize trend data for charting (limit to 50 data points for performance)
+  const optimizedTrend = useMemo(() => {
+    if (trend.length <= 50) return trend;
+    const step = Math.ceil(trend.length / 50);
+    return trend.filter((_, i) => i % step === 0);
+  }, [trend]);
+  const examDistribution = useMemo(() => examStats.slice(0, 5).map((exam) => ({ name: exam.exam, value: exam.totalAttempts })), [examStats]);
+
+  if (loading) return <Loader label="Analyzing your performance…" />;
+
+  return (
+    <div className="analytics-dashboard">
+      <div className="analytics-header">
+        <div>
+          <h1>Performance Analytics</h1>
+          <p>Deep dive into your typing progress and patterns</p>
+        </div>
+        <div className="analytics-controls">
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All time</option>
+            <option value="month">Last 30 days</option>
+            <option value="week">Last 7 days</option>
+          </select>
+          <button className="button button-secondary" onClick={loadAnalytics}>
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+          <button className="button button-primary" onClick={exportAsJSON}>
+            <Download size={16} />
+            Export
+          </button>
+        </div>
+      </div>
+
+      <Notice>{error}</Notice>
+
+      {/* Key Metrics Overview */}
+      <section className="analytics-cards">
+        <div className="stat-card">
+          <div className="stat-icon" style={{ color: '#6366f1' }}>
+            <Zap />
+          </div>
+          <div>
+            <p>Avg Speed</p>
+            <h3>{summary?.avgWpm?.toFixed(0) || 0} <span>WPM</span></h3>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ color: '#10b981' }}>
+            <Target />
+          </div>
+          <div>
+            <p>Avg Accuracy</p>
+            <h3>{summary?.avgAccuracy?.toFixed(1) || 0} <span>%</span></h3>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ color: '#f59e0b' }}>
+            <TrendingUp />
+          </div>
+          <div>
+            <p>Best Speed</p>
+            <h3>{summary?.maxWpm || 0} <span>WPM</span></h3>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon" style={{ color: '#06b6d4' }}>
+            <Calendar />
+          </div>
+          <div>
+            <p>Total Tests</p>
+            <h3>{summary?.totalTests || 0} <span>tests</span></h3>
+          </div>
+        </div>
+      </section>
+
+      {/* Progress Status */}
+      {progressReport && (
+        <section className="progress-section">
+          <h2>Progress Report</h2>
+          <div className="progress-cards">
+            <div className="progress-card">
+              <div className="progress-stat">
+                <span className="label">Improvement</span>
+                <span className={`value ${progressReport.trend === 'improving' ? 'positive' : progressReport.trend === 'declining' ? 'negative' : 'neutral'}`}>
+                  {progressReport.improvement}%
+                </span>
+              </div>
+              <p className="status">{progressReport.trend === 'improving' ? '📈 You\'re improving!' : progressReport.trend === 'declining' ? '📉 Keep practicing' : '⏸️ Stable performance'}</p>
+            </div>
+
+            <div className="progress-card">
+              <div className="progress-stat">
+                <span className="label">Speed Journey</span>
+                <span className="value">{progressReport.wpmStart ?? '0.00'} → {progressReport.wpmEnd ?? '0.00'}</span>
+              </div>
+              <p className="status">WPM progression in {progressReport.totalTestsInPeriod} tests</p>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Performance Trend Chart */}
+      {trend.length > 0 && (
+        <section className="chart-section">
+          <h2>Speed & Accuracy Trend</h2>
+          <div className="chart-controls">
+            <select
+              value={trendDays}
+              onChange={(e) => setTrendDays(e.target.value)}
+              className="filter-select"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+          </div>
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={optimizedTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="_id" stroke={chartAxis} />
+              <YAxis yAxisId="left" stroke="#6366f1" />
+              <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={{ color: 'var(--chart-tooltip-text)' }}
+                itemStyle={{ color: 'var(--chart-tooltip-text)' }}
+                formatter={(value) => value.toFixed(2)}
+              />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="avgWpm" stroke="#6366f1" name="Avg WPM" strokeWidth={2} dot={false} />
+              <Line yAxisId="right" type="monotone" dataKey="avgAccuracy" stroke="#10b981" name="Accuracy %" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </section>
+      )}
+
+      {/* Mode Comparison */}
+      {modeComparison.length > 0 && (
+        <section className="chart-section">
+          <h2>Test Mode Performance</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={modeComparison}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="mode" stroke={chartAxis} />
+              <YAxis stroke={chartAxis} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--chart-tooltip-text)' }} itemStyle={{ color: 'var(--chart-tooltip-text)' }} />
+              <Legend />
+              <Bar dataKey="avgWpm" fill="#6366f1" name="Avg WPM" />
+              <Bar dataKey="avgAccuracy" fill="#10b981" name="Accuracy %" />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      )}
+
+      {examDistribution.length > 0 && (
+        <section className="chart-section analytics-donut-section">
+          <div className="chart-title-row"><div><span>Practice mix</span><h2>Exam Distribution</h2></div><small>Attempts by exam</small></div>
+          <div className="donut-chart-wrap">
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie data={examDistribution} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={3}>
+                  {examDistribution.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value} attempts`, 'Practice']} />
+                <Legend verticalAlign="bottom" iconType="circle" />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+
+      {/* Weekly Pattern */}
+      {weeklyPattern.length > 0 && (
+        <section className="chart-section half-width">
+          <h2>Weekly Pattern</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={weeklyPattern}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="day" stroke={chartAxis} />
+              <YAxis stroke={chartAxis} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--chart-tooltip-text)' }} itemStyle={{ color: 'var(--chart-tooltip-text)' }} />
+              <Bar dataKey="testCount" fill="#8b5cf6" name="Tests" />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      )}
+
+      {/* Hourly Pattern */}
+      {hourlyPattern.length > 0 && (
+        <section className="chart-section half-width">
+          <h2>Hourly Pattern</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={hourlyPattern}>
+              <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+              <XAxis dataKey="hour" stroke={chartAxis} />
+              <YAxis stroke={chartAxis} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: 'var(--chart-tooltip-text)' }} itemStyle={{ color: 'var(--chart-tooltip-text)' }} />
+              <Bar dataKey="testCount" fill="#06b6d4" name="Tests" />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+      )}
+
+      {/* Top Exams */}
+      {examStats.length > 0 && (
+        <section className="chart-section">
+          <h2>Most Practiced Exams</h2>
+          <div className="exam-list">
+            {examStats.slice(0, 5).map((exam, i) => (
+              <div key={i} className="exam-item">
+                <div className="exam-rank">{i + 1}</div>
+                <div className="exam-info">
+                  <h4>{exam.exam}</h4>
+                  <p>{exam.totalAttempts} attempts</p>
+                </div>
+                <div className="exam-stats">
+                  <span className="wpm">{exam.avgWpm.toFixed(0)} WPM</span>
+                  <span className="accuracy">{exam.avgAccuracy.toFixed(1)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Detailed Results Table */}
+      {detailedReport?.results && detailedReport.results.length > 0 && (
+        <section className="chart-section">
+          <h2>Recent Test History</h2>
+          <div className="results-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Exam</th>
+                  <th>Mode</th>
+                  <th>Speed</th>
+                  <th>Accuracy</th>
+                  <th>Errors</th>
+                  <th>Duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detailedReport.results.slice(0, 10).map((result, i) => (
+                  <tr key={i}>
+                    <td>{new Date(result.date).toLocaleDateString()}</td>
+                    <td>{result.exam}</td>
+                    <td><span className="badge">{result.testMode}</span></td>
+                    <td><strong>{result.wpm} WPM</strong></td>
+                    <td>{result.accuracy.toFixed(1)}%</td>
+                    <td>{result.errors}</td>
+                    <td>{formatDuration(result.timeTaken)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

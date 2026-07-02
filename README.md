@@ -4,6 +4,10 @@ A full-stack typing practice and examination platform for competitive-exam prepa
 
 Built with React, Express, MongoDB, and Node.js.
 
+## Windows desktop edition
+
+The repository also includes an Electron desktop edition that reuses the existing React interface and Express API without changing business logic. See [docs/DESKTOP.md](docs/DESKTOP.md) for development, packaging, artifact, and desktop-integration details.
+
 ## Contents
 
 - [Highlights](#highlights)
