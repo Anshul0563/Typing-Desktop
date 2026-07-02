@@ -18,7 +18,7 @@
     "dist:win:portable": "npm run build:desktop && electron-builder --win portable",
     "test": "npm run test:server && npm run test:desktop",
     "test:server": "npm test --prefix server",
-    "test:desktop": "node --test desktop/tests"
+    "test:desktop": "node --test desktop/tests/*.test.cjs"
   },
   "main": "desktop/main.cjs",
   "build": {
