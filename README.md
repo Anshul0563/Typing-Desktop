@@ -6,6 +6,12 @@ Built with Electron, React, Express, MongoDB, and Node.js.
 
 The Electron edition reuses the established React interface and Express API without changing the application's business logic, exam workflows, scoring engine, or administration features.
 
+## Download for Windows
+
+[**Download SAS Academy Typing Portable (.exe)**](./release/SAS-Academy-Typing-Portable-1.0.0.exe)
+
+The portable executable runs directly on Windows 10/11 and does not require installation. For a conventional installer, generate `SAS-Academy-Typing-Setup-1.0.0.exe` with `npm run dist:win:installer` on Windows.
+
 ## Desktop Features
 
 - Native Windows application with a dedicated application icon
@@ -25,6 +31,7 @@ Desktop notifications and automatic application updates are not currently config
 ## Contents
 
 - [Highlights](#highlights)
+- [Download for Windows](#download-for-windows)
 - [Desktop Features](#desktop-features)
 - [Exam modes](#exam-modes)
 - [Scoring](#scoring)
