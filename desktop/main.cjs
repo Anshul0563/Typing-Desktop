@@ -68,6 +68,19 @@ function setTypingActive(active) {
   }
 }
 
+function confirmEndActiveTest() {
+  if (!typingActive || !mainWindow || mainWindow.isDestroyed()) return true;
+  return dialog.showMessageBoxSync(mainWindow, {
+    type: 'warning',
+    buttons: ['Keep typing', 'Close application'],
+    defaultId: 0,
+    cancelId: 0,
+    title: 'Typing test in progress',
+    message: 'A typing test is currently in progress.',
+    detail: 'Closing the application may end the active attempt.'
+  }) === 1;
+}
+
 function safeOpenExternal(url) {
   try {
     const protocol = new URL(url).protocol;
@@ -167,17 +180,12 @@ function createWindow() {
   mainWindow.on('close', (event) => {
     saveWindowState();
     if (!quitting && typingActive) {
-      const choice = dialog.showMessageBoxSync(mainWindow, {
-        type: 'warning',
-        buttons: ['Keep typing', 'Close application'],
-        defaultId: 0,
-        cancelId: 0,
-        title: 'Typing test in progress',
-        message: 'A typing test is currently in progress.',
-        detail: 'Closing the application may end the active attempt.'
-      });
-      if (choice === 0) event.preventDefault();
-      else setTypingActive(false);
+      event.preventDefault();
+      if (confirmEndActiveTest()) {
+        quitting = true;
+        setTypingActive(false);
+        setImmediate(() => mainWindow?.destroy());
+      }
     }
   });
 
@@ -221,7 +229,20 @@ else {
     mainWindow.show();
     mainWindow.focus();
   });
-  app.on('before-quit', () => { quitting = true; setTypingActive(false); saveWindowState(); });
+  app.on('before-quit', (event) => {
+    if (!quitting && typingActive) {
+      event.preventDefault();
+      if (!confirmEndActiveTest()) return;
+      quitting = true;
+      setTypingActive(false);
+      mainWindow?.destroy();
+      app.quit();
+      return;
+    }
+    quitting = true;
+    setTypingActive(false);
+    saveWindowState();
+  });
 
   app.whenReady().then(() => {
     registerDesktopIpc();

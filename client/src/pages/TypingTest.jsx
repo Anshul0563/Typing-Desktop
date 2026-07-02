@@ -115,6 +115,11 @@ export default function TypingTest() {
   }, [data, fontSize, phase, practiceTheme]);
   useEffect(() => { const syncFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement)); document.addEventListener('fullscreenchange', syncFullscreen); return () => { document.removeEventListener('fullscreenchange', syncFullscreen); if (document.fullscreenElement) void Promise.resolve(document.exitFullscreen()).catch(() => {}); }; }, []);
   useEffect(() => {
+    const active = ['active', 'submitting', 'ended'].includes(phase);
+    window.desktopApp?.setTypingActive(active);
+    return () => window.desktopApp?.setTypingActive(false);
+  }, [phase]);
+  useEffect(() => {
     if (!wordHighlight || !autoScroll || phase !== 'active' || !currentWordRef.current || !referenceRef.current) return;
     const word = currentWordRef.current; const container = referenceRef.current; const top = word.offsetTop; const bottom = top + word.offsetHeight;
     if (top < container.scrollTop + 18 || bottom > container.scrollTop + container.clientHeight - 18) container.scrollTo({ top: Math.max(0, top - container.clientHeight / 2), behavior: 'smooth' });
@@ -143,7 +148,7 @@ export default function TypingTest() {
   };
   const confirmRestart = () => { if (!typedRef.current || window.confirm('Reset this test? Your typed text and current timer will be cleared.')) void restart(); };
   const changeFontSize = (amount) => setFontSize((value) => Math.min(30, Math.max(14, value + amount)));
-  const toggleFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); inputRef.current?.focus({ preventScroll: true }); } catch { setError('Fullscreen is not available in this browser.'); } };
+  const toggleFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); inputRef.current?.focus({ preventScroll: true }); } catch { setError('Fullscreen is not available on this device.'); } };
   const keepCaretAtEnd = () => {
     const input = inputRef.current; if (!input || !activeRef.current) return; const end = input.value.length; if (input.selectionStart !== end || input.selectionEnd !== end) input.setSelectionRange(end, end);
   };
