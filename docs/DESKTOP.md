@@ -67,6 +67,7 @@ Windows artifacts are unsigned unless a code-signing identity is configured. Win
 - `client/.env.desktop`
 - `desktop/main.cjs`
 - `desktop/preload.cjs`
+- `desktop/dev.cjs`
 - `desktop/assets/icon.png`
 - `docs/DESKTOP.md`
 

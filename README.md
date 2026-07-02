@@ -169,6 +169,7 @@ In development, `npm run dev:desktop` starts the Electron application, React dev
 .
 ├── desktop/                 Electron desktop integration
 │   ├── assets/              Windows application icon
+│   ├── dev.cjs              Cross-platform Electron development launcher
 │   ├── main.cjs             Main process, native window, menus, dialogs, and lifecycle
 │   └── preload.cjs          Minimal isolated renderer bridge
 ├── client/                  React + Vite renderer interface
