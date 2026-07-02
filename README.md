@@ -8,9 +8,9 @@ The Electron edition reuses the established React interface and Express API with
 
 ## Download for Windows
 
-[**Download SAS Academy Typing Portable (.exe)**](./release/SAS-Academy-Typing-Portable-1.0.0.exe)
+[**Download SAS Academy Typing Portable (.exe)**](https://github.com/Anshul0563/Typing-Desktop/releases/latest/download/SAS-Academy-Typing-Portable-1.0.0.exe)
 
-The portable executable runs directly on Windows 10/11 and does not require installation. For a conventional installer, generate `SAS-Academy-Typing-Setup-1.0.0.exe` with `npm run dist:win:installer` on Windows.
+This direct GitHub Release link starts the `.exe` download instead of opening a repository file-preview page. The portable executable runs directly on Windows 10/11 and does not require installation. For a conventional installer, use the setup executable attached to the same release.
 
 ## Desktop Features
 
