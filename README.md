@@ -20,13 +20,16 @@ The portable executable runs directly on Windows 10/11 and does not require inst
 - Remembered window size, position, and maximized state
 - Standard desktop keyboard shortcuts for editing, zoom, reload, and fullscreen
 - Native file selection and download save dialogs
+- Native download-complete notifications with Explorer reveal
 - Single-instance behavior that restores and focuses the existing window
+- Active-test close protection and display-sleep prevention
+- Native text-editing context menus and renderer crash recovery
 - Secure renderer isolation with sandboxing and Node.js integration disabled
 - NSIS installer configuration and a standalone portable build
 - Local static assets, persistent sessions, themes, and typing preferences
 - Graceful offline and unreachable-service messages
 
-Desktop notifications and automatic application updates are not currently configured. They should not be advertised or relied upon until a notification workflow and signed update provider are added.
+Download-complete notifications are supported. General reminders and automatic application updates are not currently configured; they require an explicit notification workflow and a signed update provider.
 
 ## Contents
 

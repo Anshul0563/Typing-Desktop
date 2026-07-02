@@ -57,17 +57,22 @@ Windows artifacts are unsigned unless a code-signing identity is configured. Win
 - Single-instance behavior and focus restoration
 - Secure isolated renderer (`contextIsolation`, sandbox, no Node.js integration)
 - Native save dialog for generated downloads and native file picker for uploads
+- Download-complete notifications that reveal the saved file in Explorer
 - External web, email, telephone, maps, and social links opened in the operating system
 - Standard edit, zoom, fullscreen, reload, and window keyboard shortcuts
+- Active typing-test close confirmation and display-sleep prevention
+- Native editable-text context menus, off-screen window recovery, and renderer crash handling
 - Packaged local static assets and desktop-aware hash routing
 - Friendly network/offline errors while preserving cached site settings and local preferences
 
 ## Files added
 
 - `client/.env.desktop`
+- `client/src/components/DesktopBridge.jsx`
 - `desktop/main.cjs`
 - `desktop/preload.cjs`
 - `desktop/dev.cjs`
+- `desktop/tests/integration.test.cjs`
 - `desktop/assets/icon.png`
 - `docs/DESKTOP.md`
 
@@ -76,8 +81,11 @@ Windows artifacts are unsigned unless a code-signing identity is configured. Win
 - `.gitignore`
 - `README.md`
 - `client/src/App.jsx`
+- `client/index.html`
 - `client/src/main.jsx`
+- `client/src/pages/TypingTest.jsx`
 - `client/src/services/api.js`
+- `client/src/styles.css`
 - `client/vite.config.js`
 - `package.json`
 - `package-lock.json`

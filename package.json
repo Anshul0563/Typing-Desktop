@@ -16,7 +16,9 @@
     "dist:win": "npm run build:desktop && electron-builder --win nsis portable",
     "dist:win:installer": "npm run build:desktop && electron-builder --win nsis",
     "dist:win:portable": "npm run build:desktop && electron-builder --win portable",
-    "test": "npm test --prefix server"
+    "test": "npm run test:server && npm run test:desktop",
+    "test:server": "npm test --prefix server",
+    "test:desktop": "node --test desktop/tests"
   },
   "main": "desktop/main.cjs",
   "build": {
