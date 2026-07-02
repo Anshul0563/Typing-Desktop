@@ -164,7 +164,7 @@ In development, `npm run dev:desktop` starts the Electron application, React dev
 │   ├── assets/              Windows application icon
 │   ├── main.cjs             Main process, native window, menus, dialogs, and lifecycle
 │   └── preload.cjs          Minimal isolated renderer bridge
-├── client/                  React + Vite frontend
+├── client/                  React + Vite renderer interface
 │   ├── public/              Logos and exam assets
 │   └── src/
 │       ├── components/      Shared UI components
@@ -191,7 +191,7 @@ In development, `npm run dev:desktop` starts the Electron application, React dev
 | Layer | Technology |
 | --- | --- |
 | Desktop runtime | Electron 37 |
-| Frontend | React 19, React Router, Vite |
+| Renderer UI | React 19, React Router, Vite |
 | UI | CSS, Lucide React |
 | Charts | Recharts |
 | Backend | Node.js 22, Express 5 |
@@ -311,7 +311,7 @@ Run these commands from the repository root unless noted otherwise.
 | `npm run dev:desktop` | Start Electron, the React renderer, and Express API in development mode |
 | `npm run dev` | Start the React and Express services without Electron |
 | `npm run install:all` | Install client and server dependencies |
-| `npm run build` | Build the production frontend |
+| `npm run build` | Build the production React interface without packaging Electron |
 | `npm run build:desktop` | Build the production Electron renderer |
 | `npm run dist:win` | Generate the Windows installer and portable executable |
 | `npm run dist:win:installer` | Generate the NSIS Windows installer |
@@ -383,43 +383,68 @@ Authorization: Bearer <token>
 | `GET/PUT` | `/api/admin/settings` | Admin |
 | `GET` | `/api/settings` | Public |
 
-## Deployment
+## Windows installation
 
-### Render API
+### Installer
 
-The repository includes [render.yaml](./render.yaml).
+1. Download `SAS-Academy-Typing-Setup-<version>.exe` from the project release.
+2. Open the installer and approve the Windows security prompt if the publisher is trusted.
+3. Select an installation directory when prompted.
+4. Launch **SAS Academy Typing** from the Start menu or desktop shortcut.
 
-1. Create a Render Blueprint or Node web service.
-2. Use `server` as the root directory.
-3. Set the production environment variables.
-4. Use `/health` as the health-check path.
+The installer is per-user by default and supports normal Windows uninstall behavior. Unsigned local builds may trigger a Microsoft Defender SmartScreen warning; production releases should be code-signed.
 
-```text
-Build command: npm ci
-Start command: npm start
+### Portable application
+
+Download `SAS-Academy-Typing-Portable-<version>.exe` and run it directly. The portable edition requires no installation and can be moved to another folder or removable drive. Application preferences and authentication storage remain in the Windows user profile.
+
+Both editions require network access to the API configured at build time and to its MongoDB-backed services. Static interface assets load locally.
+
+## Desktop distribution
+
+Windows packages are generated with [electron-builder](https://www.electron.build/). Configuration is stored in the root `package.json`, and output is written to `release/`.
+
+Install dependencies and build both Windows targets:
+
+```bash
+npm install
+npm run install:all
+npm run dist:win
 ```
 
-Render's free tier may sleep after inactivity, making the first request slower. Use an always-on plan or an external uptime monitor when predictable first-request latency is required.
+Build targets individually:
 
-### Vercel client
+```bash
+# NSIS Windows installer
+npm run dist:win:installer
 
-1. Import the repository into Vercel.
-2. Set the project root directory to `client`.
-3. Choose the Vite framework preset.
-4. Set `VITE_API_URL` to the deployed Render API.
-
-```text
-Build command: npm run build
-Output directory: dist
+# Standalone portable executable
+npm run dist:win:portable
 ```
 
-The included `client/vercel.json` routes client-side URLs to `index.html`.
+Expected artifacts:
+
+```text
+release/
+├── SAS-Academy-Typing-Setup-1.0.0.exe
+├── SAS-Academy-Typing-Portable-1.0.0.exe
+└── win-unpacked/
+    └── SAS Academy Typing.exe
+```
+
+Run packaging on Windows for the most reliable installer generation. Cross-building from Linux requires a complete Wine installation because electron-builder invokes Windows resource and NSIS helpers. Code signing and automatic updates require additional publisher credentials and release-provider configuration; neither is enabled by default.
+
+### Optional hosted API and web client
+
+The desktop renderer currently communicates with a separately running Express API. The included `render.yaml` can deploy that API to Render or serve as a reference for another Node.js host. Set `VITE_API_URL` before packaging so the Windows application targets the correct API.
+
+The original web client remains buildable with `npm run build`. If it is deployed independently, `client/vercel.json` provides the single-page application fallback and the API must allow that web origin through `CLIENT_URL`. Web hosting is optional and is not required to run the Electron renderer.
 
 ## Testing
 
 ```bash
 npm test
-npm run build
+npm run build:desktop
 npm run build --prefix server
 ```
 
@@ -437,32 +462,49 @@ The server suite covers routing, CORS, catalogue assets, signed test timing, aut
 - Helmet, compression, request-size limits, and rate limiting are enabled.
 - Password-reset tokens are random, hashed in storage, single-use, and expire after 15 minutes.
 - Production password-reset tokens are delivered by email and are not returned in API responses.
+- Electron uses renderer sandboxing, context isolation, and disabled Node.js integration.
+- New windows and external navigation are denied inside the renderer and handed to Windows when appropriate.
+- Renderer permission requests are denied unless explicitly implemented in the desktop main process.
 
 ## Troubleshooting
 
-### The first production request is slow
+### The desktop window opens but data does not load
 
-Render free services sleep after inactivity. The application already minimizes startup database work and uses a single-request actual-exam launch, but infrastructure cold starts require an always-on service or uptime monitor.
-
-### The API rejects the frontend origin
-
-Set `CLIENT_URL` to the exact HTTPS frontend origin and redeploy the API:
+Confirm that the desktop renderer was built with a reachable API URL:
 
 ```env
-CLIENT_URL=https://your-app.vercel.app
+VITE_API_URL=https://api.example.com/api
 ```
 
-For multiple exact origins, separate them with commas. Do not use wildcards in production.
+Then rebuild the Windows package. Also check the API health endpoint, firewall, proxy, VPN, and internet connection.
 
-### Login works but pages cannot load data
+### The first request is slow
 
-Confirm that the frontend variable includes the API URL:
+A remotely hosted API may be cold-starting or reconnecting to MongoDB. Use an always-on API host when predictable first-request latency is required.
 
-```env
-VITE_API_URL=https://your-api.onrender.com/api
-```
+### The API rejects a hosted client origin
 
-Then rebuild and redeploy the frontend.
+This usually affects the optional web client rather than the packaged Electron renderer. Set `CLIENT_URL` to each exact HTTPS web origin, separated by commas, and do not use wildcards.
+
+### Windows displays a SmartScreen warning
+
+Local and development packages are unsigned. Verify the source before continuing. Production distributors should sign the installer and executable with a trusted Windows code-signing certificate.
+
+### The installer does not build on Linux
+
+Install a complete Wine environment or run `npm run dist:win:installer` on Windows. A 64-bit-only Wine runtime may build the portable target but fail while NSIS generates its 32-bit uninstaller helper.
+
+### The application opens more than once or does not regain focus
+
+Only one instance is permitted. If a previous process is stuck, close **SAS Academy Typing** and its Electron processes in Task Manager, then start it again.
+
+### The window size or position is incorrect
+
+Window bounds are stored in Electron's user-data directory. Close the application, remove its `window-state.json`, and restart to restore the default `1280 × 820` window.
+
+### Downloads do not appear
+
+The application asks for a destination through the native Windows save dialog. Confirm the selected folder is writable and that endpoint security software is not blocking the executable.
 
 ### No paragraph is available for an exam
 
@@ -479,4 +521,3 @@ The API process is running, but MongoDB is not connected. Check `MONGODB_URI`, A
 ---
 
 Developed for focused, accurate, exam-oriented typing practice.
-# Typing-Desktop
