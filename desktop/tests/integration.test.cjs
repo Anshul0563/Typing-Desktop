@@ -14,6 +14,7 @@ test('desktop renderer runs with hardened Electron preferences', () => {
   assert.match(main, /webSecurity:\s*true/);
   assert.match(main, /setPermissionRequestHandler/);
   assert.match(main, /setZoomFactor\(1\)/);
+  assert.match(main, /setVisualZoomLevelLimits\(1, 1\)/);
 });
 
 test('preload exposes a narrow API instead of Electron internals', () => {
