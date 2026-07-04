@@ -24,10 +24,11 @@ function buildWordAlignment(sourceValue, typedValue) {
       const deletionCost = costs[(i - 1) * width + j] + 1; const insertionCost = costs[i * width + j - 1] + 1;
       const diagonalExact = exact[(i - 1) * width + j - 1] + (same ? 1 : 0);
       const deletionExact = exact[(i - 1) * width + j]; const insertionExact = exact[i * width + j - 1];
+      const preferredDirection = j > i ? 3 : i > j ? 2 : 1;
       const choices = [
-        { direction: 1, cost: diagonalCost, exact: diagonalExact, rank: same ? 0 : 2 },
-        { direction: 2, cost: deletionCost, exact: deletionExact, rank: 1 },
-        { direction: 3, cost: insertionCost, exact: insertionExact, rank: 1 }
+        { direction: 1, cost: diagonalCost, exact: diagonalExact, rank: same && preferredDirection === 1 ? 0 : 2 },
+        { direction: 2, cost: deletionCost, exact: deletionExact, rank: preferredDirection === 2 ? 0 : 1 },
+        { direction: 3, cost: insertionCost, exact: insertionExact, rank: preferredDirection === 3 ? 0 : 1 }
       ];
       choices.sort((left, right) => left.cost - right.cost || right.exact - left.exact || left.rank - right.rank || left.direction - right.direction);
       costs[index] = choices[0].cost; exact[index] = choices[0].exact; directions[index] = choices[0].direction;
@@ -79,103 +80,101 @@ const isLetter = (value) => /\p{L}/u.test(value);
  * Costs are computed with rolling rows; only one byte per cell is retained for
  * backtracking, keeping normal exam passages comfortably bounded in memory.
  */
-export function classifyErrors(sourceValue, typedValue, allErrorsAreFull = false) {
-  const sourceAll = segmentCharacters(sourceValue.replace(/\r\n?/g, '\n'));
-  const typedAll = segmentCharacters(typedValue.replace(/\r\n?/g, '\n'));
-  if (!typedAll.length && sourceAll.length) {
-    const omittedWords = Math.max(1, segmentWords(sourceValue).length);
-    const counts = { omission: omittedWords, addition: 0, spelling: 0, substitution: 0, repetition: 0, incompleteWord: 0, spacing: 0, capitalization: 0, punctuation: 0, transposition: 0, paragraphic: 0 };
-    return { counts, fullErrors: omittedWords, halfErrors: 0, weightedErrors: omittedWords, referenceParts: [{ text: sourceAll.join(''), severity: 'full', category: 'omission' }], typedParts: [] };
-  }
-  const sourceWords = segmentWords(sourceValue); const typedWords = segmentWords(typedValue);
-  const frequencies = (words) => words.reduce((counts, word) => counts.set(word, (counts.get(word) || 0) + 1), new Map());
-  const sourceFrequency = frequencies(sourceWords); const typedFrequency = frequencies(typedWords);
-  const typedTokens = []; let tokenStart = -1;
-  for (let index = 0; index <= typedAll.length; index += 1) {
-    if (index < typedAll.length && !isWhitespace(typedAll[index])) { if (tokenStart < 0) tokenStart = index; }
-    else if (tokenStart >= 0) { typedTokens.push({ text: typedAll.slice(tokenStart, index).join(''), start: tokenStart }); tokenStart = -1; }
-  }
-  const repeatedToken = typedTokens.find((token, index) => index > 0 && token.text === typedTokens[index - 1].text && typedFrequency.get(token.text) > (sourceFrequency.get(token.text) || 0));
-  const repetitionStart = repeatedToken?.start;
-  let prefixLength = 0;
-  while (prefixLength < sourceAll.length && prefixLength < typedAll.length && (repetitionStart == null || prefixLength < repetitionStart) && sourceAll[prefixLength] === typedAll[prefixLength]) prefixLength += 1;
-  let suffixLength = 0;
-  while (suffixLength < sourceAll.length - prefixLength && suffixLength < typedAll.length - prefixLength && sourceAll[sourceAll.length - 1 - suffixLength] === typedAll[typedAll.length - 1 - suffixLength]) suffixLength += 1;
-  const source = sourceAll.slice(prefixLength, suffixLength ? sourceAll.length - suffixLength : sourceAll.length);
-  const typed = typedAll.slice(prefixLength, suffixLength ? typedAll.length - suffixLength : typedAll.length);
-  const width = typed.length + 1;
-  const directions = new Uint8Array((source.length + 1) * width);
-  let previous = Uint32Array.from({ length: width }, (_, index) => index);
-  for (let j = 1; j <= typed.length; j += 1) directions[j] = 3;
-  for (let i = 1; i <= source.length; i += 1) {
-    const current = new Uint32Array(width); current[0] = i; directions[i * width] = 2;
-    for (let j = 1; j <= typed.length; j += 1) {
-      const index = i * width + j;
-      if (source[i - 1] === typed[j - 1]) { current[j] = previous[j - 1]; directions[index] = 1; continue; }
-      const substitute = previous[j - 1] + 1; const omit = previous[j] + 1; const add = current[j - 1] + 1;
-      if (substitute <= omit && substitute <= add) { current[j] = substitute; directions[index] = 4; }
-      else if (omit <= add) { current[j] = omit; directions[index] = 2; }
-      else { current[j] = add; directions[index] = 3; }
-    }
-    previous = current;
+const emptyCounts = () => ({ omission: 0, addition: 0, spelling: 0, substitution: 0, repetition: 0, incompleteWord: 0, spacing: 0, capitalization: 0, punctuation: 0, transposition: 0, paragraphic: 0 });
+const halfCategories = new Set(['spacing', 'capitalization', 'punctuation', 'transposition', 'paragraphic']);
+
+function localCharacterAlignment(sourceValue, typedValue) {
+  const source = segmentCharacters(sourceValue); const typed = segmentCharacters(typedValue); const width = typed.length + 1;
+  const costs = new Uint32Array((source.length + 1) * width); const directions = new Uint8Array((source.length + 1) * width);
+  for (let i = 1; i <= source.length; i += 1) { costs[i * width] = i; directions[i * width] = 2; }
+  for (let j = 1; j <= typed.length; j += 1) { costs[j] = j; directions[j] = 3; }
+  for (let i = 1; i <= source.length; i += 1) for (let j = 1; j <= typed.length; j += 1) {
+    const index = i * width + j;
+    if (source[i - 1] === typed[j - 1]) { costs[index] = costs[(i - 1) * width + j - 1]; directions[index] = 1; continue; }
+    const substitution = costs[(i - 1) * width + j - 1] + 1; const deletion = costs[(i - 1) * width + j] + 1; const insertion = costs[i * width + j - 1] + 1;
+    if (substitution <= deletion && substitution <= insertion) { costs[index] = substitution; directions[index] = 4; }
+    else if (deletion <= insertion) { costs[index] = deletion; directions[index] = 2; }
+    else { costs[index] = insertion; directions[index] = 3; }
   }
   const operations = []; let i = source.length; let j = typed.length;
   while (i || j) {
-    const move = directions[i * width + j];
-    if (move === 1) { operations.push({ source: source[--i], typed: typed[--j], equal: true }); }
-    else if (move === 4) { operations.push({ source: source[--i], typed: typed[--j] }); }
-    else if (move === 2 || j === 0) { operations.push({ source: source[--i], typed: '' }); }
-    else { operations.push({ source: '', typed: typed[--j] }); }
+    const direction = directions[i * width + j];
+    if (direction === 1) operations.push({ source: source[--i], typed: typed[--j], equal: true });
+    else if (direction === 4) operations.push({ source: source[--i], typed: typed[--j], equal: false });
+    else if (direction === 2 || j === 0) operations.push({ source: source[--i], typed: '', equal: false });
+    else operations.push({ source: '', typed: typed[--j], equal: false });
   }
-  operations.reverse();
-  if (prefixLength) operations.unshift(...sourceAll.slice(0, prefixLength).map((character) => ({ source: character, typed: character, equal: true })));
-  if (suffixLength) operations.push(...sourceAll.slice(sourceAll.length - suffixLength).map((character) => ({ source: character, typed: character, equal: true })));
+  return operations.reverse();
+}
 
-  const counts = { omission: 0, addition: 0, spelling: 0, substitution: 0, repetition: 0, incompleteWord: 0, spacing: 0, capitalization: 0, punctuation: 0, transposition: 0, paragraphic: 0 };
-  const classified = [];
+function classifyLocalOperations(sourceText, typedText, whitespaceOnly, allErrorsAreFull, counts) {
+  const operations = localCharacterAlignment(sourceText, typedText); const classified = [];
   for (let cursor = 0; cursor < operations.length;) {
     if (operations[cursor].equal) { classified.push({ ...operations[cursor], severity: 'correct', category: 'correct' }); cursor += 1; continue; }
-    let end = cursor + 1;
-    while (end < operations.length && !operations[end].equal) end += 1;
-    const run = operations.slice(cursor, end);
-    const left = operations[cursor - 1]; const right = operations[end];
-    const sourceText = run.map((item) => item.source).join(''); const typedText = run.map((item) => item.typed).join('');
-    let category;
-    if ([...sourceText, ...typedText].some(isLineBreak)) category = 'paragraphic';
-    else if ([...sourceText, ...typedText].every(isWhitespace)) category = 'spacing';
-    else if (sourceText && typedText && sourceText.localeCompare(typedText, undefined, { sensitivity: 'accent' }) === 0) category = 'capitalization';
-    else if ([...sourceText, ...typedText].every((char) => isPunctuation(char))) category = 'punctuation';
-    else if (sourceText.length === 2 && typedText === [...sourceText].reverse().join('')) category = 'transposition';
-    else if (!typedText) {
-      const touchesWord = (left?.source && !isWhitespace(left.source)) || (right?.source && !isWhitespace(right.source));
-      category = sourceText && ![...sourceText].some(isWhitespace) && touchesWord ? 'incompleteWord' : 'omission';
-    }
-    else if (!sourceText) {
-      const addedToken = typedText.trim();
-      const beforeText = operations.slice(0, cursor).map((item) => item.typed).join('').trimEnd();
-      const afterText = operations.slice(end).map((item) => item.typed).join('').trimStart();
-      const previousWord = beforeText.match(/\S+$/u)?.[0]; const nextWord = afterText.match(/^\S+/u)?.[0];
-      category = addedToken && (addedToken === previousWord || addedToken === nextWord) ? 'repetition' : 'addition';
-    }
-    else if ([...sourceText, ...typedText].every((char) => isLetter(char))) category = 'spelling';
+    let end = cursor + 1; while (end < operations.length && !operations[end].equal) end += 1;
+    const run = operations.slice(cursor, end); const sourceRun = run.map((item) => item.source).join(''); const typedRun = run.map((item) => item.typed).join('');
+    const characters = [...sourceRun, ...typedRun]; let category;
+    if (characters.some(isLineBreak)) category = 'paragraphic';
+    else if (whitespaceOnly || (characters.length && characters.every(isWhitespace))) category = 'spacing';
+    else if (sourceRun && typedRun && sourceRun !== typedRun && sourceRun.toLocaleLowerCase() === typedRun.toLocaleLowerCase()) category = 'capitalization';
+    else if (characters.length && characters.every(isPunctuation)) category = 'punctuation';
+    else if (sourceRun.length === 2 && typedRun === [...sourceRun].reverse().join('')) category = 'transposition';
+    else if (!typedRun) category = 'incompleteWord';
+    else if (characters.length && characters.every(isLetter)) category = 'spelling';
     else category = 'substitution';
-    const affectedWords = category === 'omission' ? segmentWords(sourceText).length : ['addition', 'repetition'].includes(category) ? segmentWords(typedText).length : 0;
-    counts[category] += Math.max(1, affectedWords);
-    const halfCategory = ['spacing', 'capitalization', 'punctuation', 'transposition', 'paragraphic'].includes(category);
-    const severity = !allErrorsAreFull && halfCategory ? 'half' : 'full';
-    for (const item of run) classified.push({ ...item, severity, category });
+    counts[category] += 1;
+    const severity = !allErrorsAreFull && halfCategories.has(category) ? 'half' : 'full';
+    classified.push(...run.map((item) => ({ ...item, severity, category })));
     cursor = end;
   }
-  const merge = (side) => classified.reduce((parts, item) => {
-    const text = item[side]; if (!text) return parts;
-    const previousPart = parts.at(-1);
-    if (previousPart?.severity === item.severity && previousPart?.category === item.category) previousPart.text += text;
-    else parts.push({ text, severity: item.severity, category: item.category });
-    return parts;
-  }, []);
-  const halfErrors = allErrorsAreFull ? 0 : counts.spacing + counts.capitalization + counts.punctuation + counts.transposition + counts.paragraphic;
-  const classifiedTotal = Object.values(counts).reduce((sum, value) => sum + value, 0);
-  return { counts, fullErrors: classifiedTotal - halfErrors, halfErrors, weightedErrors: classifiedTotal - halfErrors * 0.5, referenceParts: merge('source'), typedParts: merge('typed') };
+  return classified;
+}
+
+function appendPart(parts, text, severity = 'correct', category = 'correct') {
+  if (!text) return;
+  const previous = parts.at(-1);
+  if (previous?.severity === severity && previous?.category === category) previous.text += text;
+  else parts.push({ text, severity, category });
+}
+
+export function classifyErrors(sourceValue, typedValue, allErrorsAreFull = false) {
+  const alignment = buildWordAlignment(sourceValue, typedValue); const counts = emptyCounts();
+  const referenceParts = []; const typedParts = [];
+  const appendOperations = (operations) => {
+    for (const item of operations) {
+      appendPart(referenceParts, item.source, item.severity, item.category);
+      appendPart(typedParts, item.typed, item.severity, item.category);
+    }
+  };
+  const sourceWordSet = new Set(alignment.nodes.flatMap((node) => node.source ? [node.source.text] : []));
+  for (let index = 0; index < alignment.nodes.length; index += 1) {
+    const node = alignment.nodes[index];
+    if (node.source && node.typed) {
+      appendOperations(classifyLocalOperations(node.source.before, node.typed.before, true, allErrorsAreFull, counts));
+      if (node.type === 'match') { appendPart(referenceParts, node.source.text); appendPart(typedParts, node.typed.text); continue; }
+      const wordOperations = classifyLocalOperations(node.source.text, node.typed.text, false, allErrorsAreFull, counts);
+      const fullError = wordOperations.find((item) => item.severity === 'full');
+      if (fullError) {
+        appendPart(referenceParts, node.source.text, 'full', fullError.category);
+        appendPart(typedParts, node.typed.text, 'full', fullError.category);
+      } else appendOperations(wordOperations);
+      continue;
+    }
+    if (node.source) {
+      appendPart(referenceParts, node.source.before); counts.omission += 1;
+      appendPart(referenceParts, node.source.text, 'full', 'omission');
+      continue;
+    }
+    appendPart(typedParts, node.typed.before);
+    const previousWord = [...alignment.nodes.slice(0, index)].reverse().find((item) => item.source)?.source.text;
+    const nextWord = alignment.nodes.slice(index + 1).find((item) => item.source)?.source.text;
+    const category = sourceWordSet.has(node.typed.text) && (node.typed.text === previousWord || node.typed.text === nextWord) ? 'repetition' : 'addition';
+    counts[category] += 1; appendPart(typedParts, node.typed.text, 'full', category);
+  }
+  appendOperations(classifyLocalOperations(alignment.sourceTrailing, alignment.typedTrailing, true, allErrorsAreFull, counts));
+  const halfErrors = allErrorsAreFull ? 0 : [...halfCategories].reduce((total, category) => total + counts[category], 0);
+  const classifiedTotal = Object.values(counts).reduce((total, value) => total + value, 0);
+  return { counts, fullErrors: classifiedTotal - halfErrors, halfErrors, weightedErrors: classifiedTotal - halfErrors * 0.5, referenceParts, typedParts };
 }
 
 function alignWithinBand(target, input, band) {

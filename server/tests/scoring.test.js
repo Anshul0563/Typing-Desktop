@@ -167,6 +167,45 @@ test('persisted comparison spans and category totals share one source of truth',
   assert.equal(result.comparison.typedParts.map((part) => part.text).join(''), 'hello one  too');
 });
 
+test('word boundaries prevent capitalization from aligning with a future word', () => {
+  const source = 'responsibility. A candidate'; const typed = 'responsibility. a candidate';
+  const result = classifyErrors(source, typed);
+  assert.equal(result.counts.capitalization, 1);
+  assert.equal(result.halfErrors, 1);
+  assert.equal(result.fullErrors, 0);
+  assert.deepEqual(result.referenceParts.filter((part) => part.severity !== 'correct'), [{ text: 'A', severity: 'half', category: 'capitalization' }]);
+  assert.deepEqual(result.typedParts.filter((part) => part.severity !== 'correct'), [{ text: 'a', severity: 'half', category: 'capitalization' }]);
+  assert.equal(result.referenceParts.map((part) => part.text).join(''), source);
+  assert.equal(result.typedParts.map((part) => part.text).join(''), typed);
+});
+
+test('a full error inside a paired word highlights both entire words', () => {
+  const result = classifyErrors('strong', 'strog');
+  assert.deepEqual(result.referenceParts, [{ text: 'strong', severity: 'full', category: 'incompleteWord' }]);
+  assert.deepEqual(result.typedParts, [{ text: 'strog', severity: 'full', category: 'incompleteWord' }]);
+});
+
+test('word alignment recovers after long omissions and repeated identical words', () => {
+  const omitted = classifyErrors('start one two three four five six finish', 'start finish');
+  assert.equal(omitted.counts.omission, 6);
+  assert.equal(omitted.referenceParts.map((part) => part.text).join(''), 'start one two three four five six finish');
+  assert.equal(omitted.typedParts.map((part) => part.text).join(''), 'start finish');
+  assert.deepEqual(alignWords('go go stop go', 'go go go stop go'), { typedWords: 5, referenceWords: 4, wrongWords: 0, omittedWords: 0, extraWords: 1, totalWordErrors: 1 });
+  const repeated = classifyErrors('go go stop go', 'go go go stop go');
+  assert.equal(repeated.counts.repetition, 1);
+  assert.equal(repeated.counts.addition, 0);
+  assert.equal(repeated.counts.spacing, 0);
+  assert.deepEqual(repeated.typedParts.filter((part) => part.severity !== 'correct'), [{ text: 'go', severity: 'full', category: 'repetition' }]);
+});
+
+test('comparison projections contain only real source and typed text', () => {
+  const source = 'one\ntwo strong'; const typed = 'one two strog';
+  const result = classifyErrors(source, typed);
+  assert.equal(result.referenceParts.map((part) => part.text).join(''), source);
+  assert.equal(result.typedParts.map((part) => part.text).join(''), typed);
+  for (const part of [...result.referenceParts, ...result.typedParts]) assert.doesNotMatch(part.text, /[∅␠↵]/u);
+});
+
 test('alignment invariants hold across representative short strings', () => {
   const samples = ['', 'a', ' ', 'ab', 'a b', 'है', 'A\nB'];
   for (const source of samples) for (const typed of samples) {

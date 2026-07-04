@@ -45,3 +45,10 @@ test('packaged renderer assets resolve relative to the built index', () => {
     assert.doesNotMatch(source, /src="\/logo\.png"/);
   }
 });
+
+test('production result UI renders only canonical comparison parts', () => {
+  const resultPage = read('client/src/pages/Result.jsx');
+  assert.match(resultPage, /comparison\.referenceParts/);
+  assert.match(resultPage, /comparison\.typedParts/);
+  assert.doesNotMatch(resultPage, /referenceReviewParts|typedReviewParts|[∅␠↵]/u);
+});
