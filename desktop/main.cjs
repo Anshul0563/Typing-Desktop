@@ -175,6 +175,8 @@ function createWindow() {
   });
 
   mainWindow.webContents.setVisualZoomLevelLimits(0.75, 2);
+  mainWindow.webContents.setZoomFactor(1);
+  mainWindow.webContents.on('did-finish-load', () => mainWindow?.webContents.setZoomFactor(1));
   if (state.maximized || firstLaunch) mainWindow.maximize();
   mainWindow.once('ready-to-show', () => { mainWindow.show(); mainWindow.focus(); });
   mainWindow.on('resize', scheduleWindowStateSave);
