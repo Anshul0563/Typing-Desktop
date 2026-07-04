@@ -176,7 +176,14 @@ function createWindow() {
 
   mainWindow.webContents.setVisualZoomLevelLimits(0.75, 2);
   mainWindow.webContents.setZoomFactor(1);
-  mainWindow.webContents.on('did-finish-load', () => mainWindow?.webContents.setZoomFactor(1));
+  mainWindow.webContents.on('did-finish-load', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.setZoomFactor(1);
+    if (isDevelopment) {
+      const layout = await mainWindow.webContents.executeJavaScript(`(() => { const values = {}; for (const selector of ['html', 'body', '#root', '.home']) { const element = document.querySelector(selector); values[selector] = element ? { clientWidth: element.clientWidth, scrollWidth: element.scrollWidth, rectWidth: element.getBoundingClientRect().width, computedWidth: getComputedStyle(element).width } : null; } return { innerWidth, outerWidth, devicePixelRatio, values }; })()`);
+      console.info('Desktop layout diagnostics:', JSON.stringify({ windowBounds: mainWindow.getBounds(), contentBounds: mainWindow.getContentBounds(), zoomFactor: mainWindow.webContents.getZoomFactor(), layout }));
+    }
+  });
   if (state.maximized || firstLaunch) mainWindow.maximize();
   mainWindow.once('ready-to-show', () => { mainWindow.show(); mainWindow.focus(); });
   mainWindow.on('resize', scheduleWindowStateSave);
