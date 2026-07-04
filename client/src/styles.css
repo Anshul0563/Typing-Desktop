@@ -5460,3 +5460,9 @@ h1,h2,h3,.brand { letter-spacing: -.035em; }
   box-shadow: none;
 }
 .brand-mark img { width:100%; height:100%; object-fit:contain; }
+
+/* Circular SAS identity without the previous colored tile. */
+.brand-mark,
+.sidebar-brand .brand-mark,
+.sidebar-collapsed .sidebar-brand .brand-mark,
+.brand-mark img { border-radius:50%; }

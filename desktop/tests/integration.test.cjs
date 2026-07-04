@@ -31,6 +31,19 @@ test('Windows packaging includes installer and portable targets', () => {
   assert.equal(manifest.build.asar, true);
   assert.match(manifest.scripts['dist:win:installer'], /electron-builder --win nsis/);
   assert.match(manifest.scripts['dist:win:portable'], /electron-builder --win portable/);
+  assert.equal(manifest.build.publish[0].provider, 'github');
+});
+
+test('packaged Windows app checks and installs GitHub release updates', () => {
+  const main = read('desktop/main.cjs');
+  assert.match(main, /require\('electron-updater'\)/);
+  assert.match(main, /process\.platform !== 'win32'/);
+  assert.match(main, /autoUpdater\.checkForUpdates/);
+  assert.match(main, /autoUpdater\.downloadUpdate/);
+  assert.match(main, /autoUpdater\.quitAndInstall/);
+  const workflow = read('.github/workflows/windows-release.yml');
+  assert.match(workflow, /latest\.yml/);
+  assert.match(workflow, /\.exe\.blockmap/);
 });
 
 test('renderer has desktop routing and a restrictive content security policy', () => {

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, Notification, dialog, ipcMain, powerSaveBlocker, screen, session, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
 const { fileURLToPath, pathToFileURL } = require('node:url');
@@ -13,6 +14,7 @@ let typingActive = false;
 let powerSaveBlockerId = null;
 let quitting = false;
 let stateSaveTimer;
+let updateDownloadStarted = false;
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('in.sasacademy.typing');
@@ -151,6 +153,53 @@ function registerDesktopIpc() {
   });
 }
 
+function setupAutoUpdater() {
+  if (isDevelopment || process.platform !== 'win32') return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+
+  autoUpdater.on('update-available', async (info) => {
+    if (!mainWindow || mainWindow.isDestroyed() || updateDownloadStarted) return;
+    const response = await dialog.showMessageBox(mainWindow, {
+      type: 'info', buttons: ['Download update', 'Later'], defaultId: 0, cancelId: 1,
+      title: 'Update available', message: `SAS Academy Typing ${info.version} is available.`,
+      detail: 'Download it now? You can continue using the application while the update downloads.'
+    });
+    if (response.response !== 0) return;
+    updateDownloadStarted = true;
+    mainWindow.setProgressBar(0);
+    void autoUpdater.downloadUpdate().catch((error) => {
+      updateDownloadStarted = false;
+      mainWindow?.setProgressBar(-1);
+      console.warn(`Update download failed: ${error.message}`);
+    });
+  });
+  autoUpdater.on('download-progress', ({ percent }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setProgressBar(Math.max(0, Math.min(1, percent / 100)));
+  });
+  autoUpdater.on('update-downloaded', async (info) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setProgressBar(-1);
+    const response = await dialog.showMessageBox(mainWindow, {
+      type: 'info', buttons: ['Restart and install', 'Install on exit'], defaultId: 0, cancelId: 1,
+      title: 'Update ready', message: `SAS Academy Typing ${info.version} is ready to install.`,
+      detail: 'Restart now to finish the update, or close the app normally and it will install automatically.'
+    });
+    if (response.response === 0) {
+      quitting = true;
+      setTypingActive(false);
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+  autoUpdater.on('update-not-available', () => console.info('SAS Academy Typing is up to date.'));
+  autoUpdater.on('error', (error) => {
+    mainWindow?.setProgressBar(-1);
+    console.warn(`Auto update check failed: ${error.message}`);
+  });
+  setTimeout(() => void autoUpdater.checkForUpdates().catch((error) => console.warn(`Unable to check for updates: ${error.message}`)), 5000);
+}
+
 function createWindow() {
   const firstLaunch = !hasWindowState();
   const state = readWindowState();
@@ -281,6 +330,7 @@ else {
       });
     });
     createWindow();
+    setupAutoUpdater();
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   }).catch((error) => dialog.showErrorBox(`${APP_NAME} startup failed`, error.message));
 }

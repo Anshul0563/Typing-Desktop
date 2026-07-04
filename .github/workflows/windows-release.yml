@@ -44,5 +44,7 @@ jobs:
           gh release create "${{ github.ref_name }}" `
             "release/SAS-Academy-Typing-Setup-$version.exe" `
             "release/SAS-Academy-Typing-Portable-$version.exe" `
+            "release/SAS-Academy-Typing-Setup-$version.exe.blockmap" `
+            "release/latest.yml" `
             --title "SAS Academy Typing ${{ github.ref_name }}" `
             --generate-notes

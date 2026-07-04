@@ -51,7 +51,13 @@
     },
     "portable": {
       "artifactName": "SAS-Academy-Typing-Portable-${version}.${ext}"
-    }
+    },
+    "publish": [{
+      "provider": "github",
+      "owner": "Anshul0563",
+      "repo": "Typing-Desktop",
+      "releaseType": "release"
+    }]
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
