@@ -19,6 +19,7 @@ export function AppLayout() {
   const { user, logout } = useAuth(); const navigate = useNavigate(); const location = useLocation(); const [menuOpen, setMenuOpen] = useState(false); const [collapsed, setCollapsed] = useState(false); const [dark, setDark] = useState(() => localStorage.getItem('typepath_theme') === 'dark');
   const { settings } = useSiteSettings();
   const dashboardQuery = new URLSearchParams(location.search).get('q') || '';
+  const pageLabel = studentLinks.find(([to]) => location.pathname === to)?.[2] || (location.pathname.startsWith('/result/') ? 'Result review' : 'Workspace');
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('typepath_theme', dark ? 'dark' : 'light'); }, [dark]);
   useEffect(() => { const syncTheme = (event) => setDark(event.detail === 'dark'); window.addEventListener('typepath:theme', syncTheme); return () => window.removeEventListener('typepath:theme', syncTheme); }, []);
   const leave = () => { logout(); navigate('/'); };
@@ -38,7 +39,7 @@ export function AppLayout() {
     </aside>
     {menuOpen && <button className="sidebar-scrim" onClick={() => setMenuOpen(false)} aria-label="Close menu" />}
     <div className="student-workspace">
-      <header className="student-topbar"><button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu /></button>{['/dashboard', '/exams'].includes(location.pathname) && <label className="dashboard-search"><Search size={18} /><input aria-label="Search exams" placeholder="Search exams…" value={dashboardQuery} onChange={searchExams} /></label>}<div className="student-top-actions"><button onClick={() => setDark((value) => !value)} aria-label={`Switch to ${dark ? 'light' : 'dark'} theme`}>{dark ? <Sun /> : <Moon />}</button><div className="student-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><small>SSC Aspirant</small></div></div></div></header>
+      <header className="student-topbar"><button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu /></button><div className="topbar-page"><small>Learning studio</small><strong>{pageLabel}</strong></div>{['/dashboard', '/exams'].includes(location.pathname) && <label className="dashboard-search"><Search size={18} /><input aria-label="Search exams" placeholder="Find a test…" value={dashboardQuery} onChange={searchExams} /></label>}<div className="student-top-actions"><button onClick={() => setDark((value) => !value)} aria-label={`Switch to ${dark ? 'light' : 'dark'} theme`}>{dark ? <Sun /> : <Moon />}</button><div className="student-user"><span className="user-avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><small>Focused learner</small></div></div></div></header>
       <main className="student-main">{settings.announcement && <div className="student-announcement">{settings.announcement}</div>}<Outlet /></main>
       <Footer variant="workspace" />
     </div>
