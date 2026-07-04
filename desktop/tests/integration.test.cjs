@@ -37,3 +37,11 @@ test('renderer has desktop routing and a restrictive content security policy', (
   assert.match(html, /Content-Security-Policy/);
   assert.match(html, /object-src 'none'/);
 });
+
+test('packaged renderer assets resolve relative to the built index', () => {
+  for (const file of ['client/src/components/Brand.jsx', 'client/src/components/Loader.jsx', 'client/src/components/GlobalLoader.jsx']) {
+    const source = read(file);
+    assert.match(source, /new URL\('logo\.png', document\.baseURI\)/);
+    assert.doesNotMatch(source, /src="\/logo\.png"/);
+  }
+});

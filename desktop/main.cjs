@@ -18,6 +18,7 @@ app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('in.sasacademy.typing');
 
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
+const hasWindowState = () => fs.existsSync(stateFile());
 
 function isVisibleOnAnyDisplay(bounds) {
   return screen.getAllDisplays().some(({ workArea }) => {
@@ -151,6 +152,7 @@ function registerDesktopIpc() {
 }
 
 function createWindow() {
+  const firstLaunch = !hasWindowState();
   const state = readWindowState();
   mainWindow = new BrowserWindow({
     ...state,
@@ -173,7 +175,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.setVisualZoomLevelLimits(0.75, 2);
-  if (state.maximized) mainWindow.maximize();
+  if (state.maximized || firstLaunch) mainWindow.maximize();
   mainWindow.once('ready-to-show', () => { mainWindow.show(); mainWindow.focus(); });
   mainWindow.on('resize', scheduleWindowStateSave);
   mainWindow.on('move', scheduleWindowStateSave);

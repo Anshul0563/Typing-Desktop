@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowRight, Clock3, FileText, Maximize2, Minimize2, Minus, Plus, RotateCcw } from 'lucide-react';
 import { api } from '../services/api.js';
@@ -119,10 +119,10 @@ export default function TypingTest() {
     window.desktopApp?.setTypingActive(active);
     return () => window.desktopApp?.setTypingActive(false);
   }, [phase]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!wordHighlight || !autoScroll || phase !== 'active' || !currentWordRef.current || !referenceRef.current) return;
     const word = currentWordRef.current; const container = referenceRef.current; const top = word.offsetTop; const bottom = top + word.offsetHeight;
-    if (top < container.scrollTop + 18 || bottom > container.scrollTop + container.clientHeight - 18) container.scrollTo({ top: Math.max(0, top - container.clientHeight / 2), behavior: 'smooth' });
+    if (top < container.scrollTop + 18 || bottom > container.scrollTop + container.clientHeight - 18) container.scrollTop = Math.max(0, top - container.clientHeight / 2);
   }, [autoScroll, phase, typed, wordHighlight]);
 
   const begin = async () => {
