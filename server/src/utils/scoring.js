@@ -1,25 +1,54 @@
 const segmentCharacters = (value) => Array.from(String(value ?? '').normalize('NFC'));
 const segmentWords = (value) => String(value ?? '').normalize('NFC').match(/\S+/gu) || [];
 
-export function alignWords(source, typed) {
-  const target = segmentWords(source);
-  const input = segmentWords(typed);
-  const width = input.length + 1;
-  let previousCost = new Uint32Array(width); let previousWrong = new Uint32Array(width); let previousOmitted = new Uint32Array(width); let previousExtra = new Uint32Array(width);
-  for (let index = 0; index < width; index += 1) { previousCost[index] = index; previousExtra[index] = index; }
-  for (let i = 1; i <= target.length; i += 1) {
-    const cost = new Uint32Array(width); const wrong = new Uint32Array(width); const omitted = new Uint32Array(width); const extra = new Uint32Array(width);
-    cost[0] = i; omitted[0] = i;
-    for (let j = 1; j <= input.length; j += 1) {
-      if (target[i - 1] === input[j - 1]) { cost[j] = previousCost[j - 1]; wrong[j] = previousWrong[j - 1]; omitted[j] = previousOmitted[j - 1]; extra[j] = previousExtra[j - 1]; continue; }
-      const substitution = previousCost[j - 1] + 1; const deletion = previousCost[j] + 1; const insertion = cost[j - 1] + 1;
-      if (substitution <= deletion && substitution <= insertion) { cost[j] = substitution; wrong[j] = previousWrong[j - 1] + 1; omitted[j] = previousOmitted[j - 1]; extra[j] = previousExtra[j - 1]; }
-      else if (deletion <= insertion) { cost[j] = deletion; wrong[j] = previousWrong[j]; omitted[j] = previousOmitted[j] + 1; extra[j] = previousExtra[j]; }
-      else { cost[j] = insertion; wrong[j] = wrong[j - 1]; omitted[j] = omitted[j - 1]; extra[j] = extra[j - 1] + 1; }
-    }
-    previousCost = cost; previousWrong = wrong; previousOmitted = omitted; previousExtra = extra;
+function tokenizeText(value) {
+  const pieces = String(value ?? '').normalize('NFC').replace(/\r\n?/g, '\n').match(/\s+|\S+/gu) || [];
+  const words = []; let separator = '';
+  for (const piece of pieces) {
+    if (/^\s+$/u.test(piece)) separator += piece;
+    else { words.push({ text: piece, before: separator }); separator = ''; }
   }
-  return { typedWords: input.length, referenceWords: target.length, wrongWords: previousWrong[input.length], omittedWords: previousOmitted[input.length], extraWords: previousExtra[input.length], totalWordErrors: previousCost[input.length] };
+  return { words, trailing: separator };
+}
+
+function buildWordAlignment(sourceValue, typedValue) {
+  const source = tokenizeText(sourceValue); const typed = tokenizeText(typedValue);
+  const rows = source.words.length + 1; const columns = typed.words.length + 1;
+  const width = columns; const costs = new Uint32Array(rows * columns); const exact = new Uint32Array(rows * columns); const directions = new Uint8Array(rows * columns);
+  for (let i = 1; i < rows; i += 1) { costs[i * width] = i; directions[i * width] = 2; }
+  for (let j = 1; j < columns; j += 1) { costs[j] = j; directions[j] = 3; }
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < columns; j += 1) {
+      const index = i * width + j; const same = source.words[i - 1].text === typed.words[j - 1].text;
+      const diagonalCost = costs[(i - 1) * width + j - 1] + (same ? 0 : 1);
+      const deletionCost = costs[(i - 1) * width + j] + 1; const insertionCost = costs[i * width + j - 1] + 1;
+      const diagonalExact = exact[(i - 1) * width + j - 1] + (same ? 1 : 0);
+      const deletionExact = exact[(i - 1) * width + j]; const insertionExact = exact[i * width + j - 1];
+      const choices = [
+        { direction: 1, cost: diagonalCost, exact: diagonalExact, rank: same ? 0 : 2 },
+        { direction: 2, cost: deletionCost, exact: deletionExact, rank: 1 },
+        { direction: 3, cost: insertionCost, exact: insertionExact, rank: 1 }
+      ];
+      choices.sort((left, right) => left.cost - right.cost || right.exact - left.exact || left.rank - right.rank || left.direction - right.direction);
+      costs[index] = choices[0].cost; exact[index] = choices[0].exact; directions[index] = choices[0].direction;
+    }
+  }
+  const reversed = []; let i = source.words.length; let j = typed.words.length;
+  while (i || j) {
+    const direction = directions[i * width + j];
+    if (direction === 1) reversed.push({ source: source.words[--i], typed: typed.words[--j], type: source.words[i].text === typed.words[j].text ? 'match' : 'substitute' });
+    else if (direction === 2 || j === 0) reversed.push({ source: source.words[--i], typed: null, type: 'delete' });
+    else reversed.push({ source: null, typed: typed.words[--j], type: 'insert' });
+  }
+  return { nodes: reversed.reverse(), sourceTrailing: source.trailing, typedTrailing: typed.trailing, referenceWords: source.words.length, typedWords: typed.words.length, distance: costs.at(-1) };
+}
+
+export function alignWords(source, typed) {
+  const alignment = buildWordAlignment(source, typed);
+  const wrongWords = alignment.nodes.filter((node) => node.type === 'substitute').length;
+  const omittedWords = alignment.nodes.filter((node) => node.type === 'delete').length;
+  const extraWords = alignment.nodes.filter((node) => node.type === 'insert').length;
+  return { typedWords: alignment.typedWords, referenceWords: alignment.referenceWords, wrongWords, omittedWords, extraWords, totalWordErrors: alignment.distance };
 }
 
 /**
