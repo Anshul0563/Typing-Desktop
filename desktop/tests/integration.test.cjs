@@ -54,3 +54,18 @@ test('production result UI renders only canonical comparison parts', () => {
   assert.match(resultPage, /comparison\.typedParts/);
   assert.doesNotMatch(resultPage, /referenceReviewParts|typedReviewParts|[∅␠↵]/u);
 });
+
+test('word tracker advances as soon as the current word is complete', async () => {
+  const { pathToFileURL } = require('node:url');
+  const tracker = await import(pathToFileURL(path.join(root, 'client/src/utils/typingTracker.js')).href);
+  const tokens = [
+    { text: 'one', start: 0, end: 3, isWord: true },
+    { text: ' ', start: 3, end: 4, isWord: false },
+    { text: 'two', start: 4, end: 7, isWord: true }
+  ];
+  assert.equal(tracker.activeWordTokenIndex(tokens, 0), 0);
+  assert.equal(tracker.activeWordTokenIndex(tokens, 2), 0);
+  assert.equal(tracker.activeWordTokenIndex(tokens, 3), 2);
+  assert.equal(tracker.activeWordTokenIndex(tokens, 4), 2);
+  assert.equal(tracker.activeWordTokenIndex(tokens, 7), -1);
+});
