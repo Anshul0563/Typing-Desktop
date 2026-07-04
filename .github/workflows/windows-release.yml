@@ -40,8 +40,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
           gh release create "${{ github.ref_name }}" `
-            "release/SAS-Academy-Typing-Setup-1.0.0.exe" `
-            "release/SAS-Academy-Typing-Portable-1.0.0.exe" `
+            "release/SAS-Academy-Typing-Setup-$version.exe" `
+            "release/SAS-Academy-Typing-Portable-$version.exe" `
             --title "SAS Academy Typing ${{ github.ref_name }}" `
             --generate-notes
