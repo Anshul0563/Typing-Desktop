@@ -61,6 +61,7 @@
     "wait-on": "^8.0.3"
   },
   "dependencies": {
-    "@vercel/analytics": "^2.0.1"
+    "@vercel/analytics": "^2.0.1",
+    "electron-updater": "^6.8.9"
   }
 }
